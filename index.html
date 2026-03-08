@@ -1,0 +1,987 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>Super Jump Adventure</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #111;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      font-family: 'Courier New', monospace;
+      gap: 8px;
+      user-select: none;
+    }
+    #hud {
+      color: #fff;
+      font-size: 15px;
+      background: rgba(0,0,0,0.85);
+      padding: 6px 24px;
+      border-radius: 6px;
+      letter-spacing: 3px;
+    }
+    canvas {
+      display: block;
+      border: 3px solid #333;
+      box-shadow: 0 0 40px #0055ff44;
+      image-rendering: pixelated;
+    }
+    #bottom { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+    #controls { color: #555; font-size: 11px; letter-spacing: 1px; }
+    #charSelect { display: flex; gap: 8px; }
+    #charSelect button {
+      background: #1a1a1a;
+      color: #aaa;
+      border: 2px solid #333;
+      padding: 5px 16px;
+      cursor: pointer;
+      font-family: 'Courier New', monospace;
+      font-size: 13px;
+      border-radius: 4px;
+      transition: all 0.15s;
+    }
+    #charSelect button:hover { background: #2a2a2a; border-color: #666; color: #fff; }
+    #charSelect button.active { background: #112233; border-color: #4488ff; color: #fff; }
+  </style>
+</head>
+<body>
+  <div id="hud">
+    COIN: <span id="uiCoin">000</span>
+    &nbsp;|&nbsp;
+    LIFE: <span id="uiLife">3</span>
+    &nbsp;|&nbsp;
+    SCORE: <span id="uiScore">00000</span>
+  </div>
+  <canvas id="c" width="800" height="480"></canvas>
+  <div id="bottom">
+    <div id="controls">← → 移動 &nbsp;|&nbsp; Z / Space = ジャンプ（長押しで高く） &nbsp;|&nbsp; R = リスタート</div>
+    <div id="charSelect"></div>
+  </div>
+
+<script>
+'use strict';
+
+// ================================================================
+//  ★ CHARACTER DEFINITIONS ★
+//  キャラクターを追加・変更するにはここを編集してください。
+//  draw(ctx, x, y, w, h, dir, tick) に描画処理を書くだけで差し替え可能。
+//  dir: 1=右向き, -1=左向き
+// ================================================================
+const CHARACTERS = {
+
+  mario: {
+    name: 'マリオ',
+    speed: 4.5,
+    jumpPower: 13.5,
+    width: 32,
+    height: 40,
+    draw(ctx, x, y, w, h, dir, t) {
+      ctx.save();
+      if (dir < 0) { ctx.translate(x + w, 0); ctx.scale(-1, 1); x = 0; }
+      const run = t % 18 < 9;
+
+      // Shoes
+      ctx.fillStyle = '#5c2800';
+      ctx.fillRect(x,     y + h - 8, 14, 8);
+      ctx.fillRect(x + w - 14, y + h - 8, 14, 8);
+
+      // Overalls
+      ctx.fillStyle = '#1a3ee8';
+      ctx.fillRect(x + 4, y + h / 2, w - 8, h / 2 - 8);
+      ctx.fillRect(x + 8, y + h / 2 - 6, w - 16, 10); // bib
+
+      // Shirt
+      ctx.fillStyle = '#e52222';
+      ctx.fillRect(x + 2, y + h / 2 - 8, w - 4, h / 4 + 8);
+
+      // Arms
+      ctx.fillStyle = '#ffcc88';
+      if (run) {
+        ctx.fillRect(x - 2, y + h / 2, 6, 12);
+        ctx.fillRect(x + w - 4, y + h / 2 + 4, 6, 12);
+      } else {
+        ctx.fillRect(x - 2, y + h / 2 + 2, 6, 12);
+        ctx.fillRect(x + w - 4, y + h / 2 + 2, 6, 12);
+      }
+
+      // Head
+      ctx.fillStyle = '#ffcc88';
+      ctx.fillRect(x + 6, y + 10, w - 12, h / 3);
+
+      // Hat brim + top
+      ctx.fillStyle = '#e52222';
+      ctx.fillRect(x + 2, y + 6,  w - 4,  8);
+      ctx.fillRect(x + 6, y,      w - 12, 10);
+      ctx.fillStyle = '#c01818';
+      ctx.fillRect(x + 6, y + 8,  w - 12, 2);
+
+      // Eye
+      ctx.fillStyle = '#111';
+      ctx.fillRect(x + w - 13, y + 14, 4, 4);
+
+      // Mustache
+      ctx.fillStyle = '#7a3a00';
+      ctx.fillRect(x + 7,  y + 21, 16, 3);
+      ctx.fillRect(x + 11, y + 24, 10, 3);
+
+      ctx.restore();
+    },
+  },
+
+  robot: {
+    name: 'ロボット',
+    speed: 4.0,
+    jumpPower: 12.5,
+    width: 34,
+    height: 42,
+    draw(ctx, x, y, w, h, dir, t) {
+      ctx.save();
+
+      // Antenna
+      ctx.fillStyle = '#666';
+      ctx.fillRect(x + w / 2 - 2, y, 4, 9);
+      ctx.fillStyle = `hsl(${t * 6 % 360},100%,60%)`;
+      ctx.beginPath();
+      ctx.arc(x + w / 2, y, 5, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Head
+      ctx.fillStyle = '#b0b0b0';
+      ctx.fillRect(x + 4, y + 7, w - 8, h / 3);
+      ctx.fillStyle = '#888';
+      ctx.fillRect(x + 4, y + 7, w - 8, 4);
+
+      // Visor
+      ctx.fillStyle = '#001';
+      ctx.fillRect(x + 7, y + 13, w - 14, 10);
+      const glow = 0.4 + Math.sin(t * 0.1) * 0.3;
+      ctx.fillStyle = `rgba(0,255,255,${glow})`;
+      ctx.fillRect(x + 7, y + 13, w - 14, 10);
+      ctx.fillStyle = '#0ff';
+      ctx.fillRect(x + 9,      y + 15, 8, 5);
+      ctx.fillRect(x + w - 17, y + 15, 8, 5);
+
+      // Body
+      ctx.fillStyle = '#999';
+      ctx.fillRect(x + 2, y + h / 3 + 5, w - 4, h / 2);
+      ctx.fillStyle = '#777';
+      ctx.fillRect(x + 2, y + h / 3 + 5, w - 4, 3);
+
+      // Chest core
+      ctx.fillStyle = `hsl(${t * 4 % 360},80%,60%)`;
+      ctx.beginPath();
+      ctx.arc(x + w / 2, y + h * 0.55, 6, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Arms
+      const aOff = Math.sin(t * 0.15) * 5;
+      ctx.fillStyle = '#777';
+      ctx.fillRect(x - 6,     y + h / 3 + 7 + aOff, 8, 16);
+      ctx.fillRect(x + w - 2, y + h / 3 + 7 - aOff, 8, 16);
+      ctx.fillStyle = '#555';
+      ctx.fillRect(x - 8,     y + h / 3 + 21, 10, 6);
+      ctx.fillRect(x + w - 2, y + h / 3 + 21, 10, 6);
+
+      // Legs
+      const lOff = Math.sin(t * 0.2) * 5;
+      ctx.fillStyle = '#777';
+      ctx.fillRect(x + 6,      y + h * 5 / 6, 11, h / 6 + lOff);
+      ctx.fillRect(x + w - 17, y + h * 5 / 6, 11, h / 6 - lOff);
+      ctx.fillStyle = '#444';
+      ctx.fillRect(x + 2,      y + h - 8, 16, 8);
+      ctx.fillRect(x + w - 18, y + h - 8, 16, 8);
+
+      ctx.restore();
+    },
+  },
+
+  cat: {
+    name: 'ねこ',
+    speed: 5.2,
+    jumpPower: 14,
+    width: 30,
+    height: 36,
+    draw(ctx, x, y, w, h, dir, t) {
+      ctx.save();
+      if (dir < 0) { ctx.translate(x + w, 0); ctx.scale(-1, 1); x = 0; }
+
+      // Tail
+      const tw = Math.sin(t * 0.13) * 10;
+      ctx.strokeStyle = '#f97d2a';
+      ctx.lineWidth = 6;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(x + 5, y + h - 5);
+      ctx.quadraticCurveTo(x - 18, y + h + tw, x - 10, y + h - 16);
+      ctx.stroke();
+
+      // Body
+      ctx.fillStyle = '#f97d2a';
+      ctx.beginPath();
+      ctx.ellipse(x + w / 2, y + h * 0.65, w / 2 - 1, h * 0.32, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Belly
+      ctx.fillStyle = '#ffddb8';
+      ctx.beginPath();
+      ctx.ellipse(x + w / 2, y + h * 0.68, w / 3, h * 0.2, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Head
+      ctx.fillStyle = '#f97d2a';
+      ctx.beginPath();
+      ctx.arc(x + w / 2, y + h * 0.33, w / 2, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Ears
+      for (const ex of [x + 4, x + w - 14]) {
+        const cx = ex < x + w / 2 ? ex + 9 : ex + 5;
+        ctx.fillStyle = '#f97d2a';
+        ctx.beginPath();
+        ctx.moveTo(ex, y + h * 0.33 - 4);
+        ctx.lineTo(cx, y + 1);
+        ctx.lineTo(ex + 10, y + h * 0.33 - 4);
+        ctx.fill();
+        ctx.fillStyle = '#ffb0cc';
+        ctx.beginPath();
+        ctx.moveTo(ex + 2, y + h * 0.33 - 3);
+        ctx.lineTo(cx, y + 3);
+        ctx.lineTo(ex + 8, y + h * 0.33 - 3);
+        ctx.fill();
+      }
+
+      // Eyes
+      ctx.fillStyle = '#2ecc71';
+      ctx.beginPath();
+      ctx.ellipse(x + w / 2 - 7, y + h * 0.31, 4, 5, 0, 0, Math.PI * 2);
+      ctx.ellipse(x + w / 2 + 7, y + h * 0.31, 4, 5, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#111';
+      ctx.beginPath();
+      ctx.ellipse(x + w / 2 - 7, y + h * 0.31, 2, 4, 0, 0, Math.PI * 2);
+      ctx.ellipse(x + w / 2 + 7, y + h * 0.31, 2, 4, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(x + w / 2 - 9, y + h * 0.28, 2, 2);
+      ctx.fillRect(x + w / 2 + 5, y + h * 0.28, 2, 2);
+
+      // Nose
+      ctx.fillStyle = '#ff9988';
+      ctx.beginPath();
+      ctx.arc(x + w / 2, y + h * 0.37, 3, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Whiskers
+      ctx.strokeStyle = 'rgba(255,255,255,0.75)';
+      ctx.lineWidth = 1;
+      for (let i = -1; i <= 1; i++) {
+        ctx.beginPath();
+        ctx.moveTo(x + w / 2, y + h * 0.37);
+        ctx.lineTo(x + w / 2 + 22, y + h * 0.37 + i * 4);
+        ctx.stroke();
+      }
+
+      // Paws
+      const run = t % 18 < 9;
+      ctx.fillStyle = '#f97d2a';
+      ctx.fillRect(x + 2, y + h - (run ? 11 : 9), 10, run ? 11 : 9);
+      ctx.fillRect(x + w - 12, y + h - (run ? 7 : 9), 10, run ? 7 : 9);
+
+      ctx.restore();
+    },
+  },
+
+  // ── キャラクター追加テンプレート ──────────────────────────────
+  // newchar: {
+  //   name: '新キャラ',
+  //   speed: 4,
+  //   jumpPower: 13,
+  //   width: 32,
+  //   height: 40,
+  //   draw(ctx, x, y, w, h, dir, t) {
+  //     // ここに描画処理を書く
+  //   },
+  // },
+};
+
+// ★ デフォルトキャラクター
+let curCharKey = 'mario';
+
+// ================================================================
+//  GAME CONSTANTS
+// ================================================================
+const CW       = 800;
+const CH       = 480;
+const GRAVITY  = 0.55;
+const GND_Y    = 400;   // 地面の上端Y座標
+const LEVEL_W  = 5400;  // レベル全体の幅
+
+// ================================================================
+//  GAME STATE
+// ================================================================
+let state  = 'playing'; // 'playing' | 'dead' | 'gameover' | 'win'
+let lives  = 3;
+let coins  = 0;
+let score  = 0;
+let tick   = 0;
+let camX   = 0;
+
+const canvas = document.getElementById('c');
+const ctx    = canvas.getContext('2d');
+
+// ================================================================
+//  LEVEL DATA
+// ================================================================
+let platforms, enemies, coinItems, goal, particles;
+
+function buildLevel() {
+  platforms = [];
+  enemies   = [];
+  coinItems = [];
+  particles = [];
+
+  // 地面セグメント [startX, endX]
+  [
+    [0,    1200],
+    [1350, 2200],
+    [2380, 3150],
+    [3300, 4050],
+    [4200, 4950],
+    [5050, LEVEL_W + 100],
+  ].forEach(([sx, ex]) => {
+    platforms.push({ x: sx, y: GND_Y, w: ex - sx, h: 120, type: 'ground' });
+  });
+
+  // 足場プラットフォーム [x, y, w]
+  [
+    [160,  320, 100], [320,  275, 80],  [490,  330, 100], [650,  280, 80],
+    [820,  315, 100], [980,  255, 80],  [1140, 325, 80],  [1270, 275, 100],
+    [1440, 295, 80],  [1610, 245, 80],  [1760, 315, 100], [1930, 265, 80],
+    [2090, 325, 80],  [2270, 285, 80],  [2460, 315, 100], [2620, 255, 80],
+    [2770, 315, 80],  [2970, 275, 100], [3160, 325, 80],
+    [3360, 275, 80],  [3520, 315, 100], [3680, 255, 80],  [3840, 315, 80],
+    [4040, 285, 80],
+    [4230, 315, 80],  [4390, 255, 100], [4540, 315, 80],  [4710, 280, 80],
+    [4900, 315, 100],
+    [5120, 315, 100], [5280, 265, 80],
+  ].forEach(([x, y, w]) => {
+    platforms.push({ x, y, w, h: 20, type: 'platform' });
+  });
+
+  // ？ブロック [x, y]
+  [
+    [210, 245], [360, 205], [680, 215], [1010, 185],
+    [1300, 205], [1660, 175], [2010, 205], [2640, 185],
+    [3010, 205], [3570, 205], [3870, 215], [4420, 185],
+    [4750, 205], [5150, 185],
+  ].forEach(([x, y]) => {
+    platforms.push({ x, y, w: 40, h: 40, type: 'qblock', hit: false });
+  });
+
+  // 敵 [x, groundY, dir]
+  [
+    [310,  GND_Y, 1], [620,  GND_Y, -1], [870,  GND_Y, 1],
+    [1110, GND_Y, -1],[1460, GND_Y, 1],  [1710, GND_Y, -1],
+    [1960, GND_Y, 1], [2420, GND_Y, -1], [2720, GND_Y, 1],
+    [2920, GND_Y, -1],[3370, GND_Y, 1],  [3620, GND_Y, -1],
+    [3870, GND_Y, 1], [4270, GND_Y, -1], [4520, GND_Y, 1],
+    [4720, GND_Y, -1],[5070, GND_Y, 1],  [5250, GND_Y, -1],
+    // 足場の上
+    [190,  320, 1], [830,  315, -1], [1460, 295, 1],
+    [2480, 315, -1],[3540, 315, 1],  [4410, 255, -1],
+  ].forEach(([ex, gy, dir]) => {
+    enemies.push({ x: ex, y: gy - 30, vx: dir * 1.5, vy: 0,
+                   w: 30, h: 30, alive: true, dTimer: 0 });
+  });
+
+  // コイン配置
+  for (let x = 120; x < LEVEL_W - 200; x += 68) {
+    if (Math.random() > 0.38) {
+      coinItems.push({ x, y: GND_Y - 55 - Math.random() * 95, col: false });
+    }
+  }
+  platforms.filter(p => p.type === 'platform').forEach(p => {
+    for (let cx = p.x + 10; cx < p.x + p.w - 10; cx += 24) {
+      coinItems.push({ x: cx, y: p.y - 28, col: false });
+    }
+  });
+
+  goal = { x: LEVEL_W - 100, y: GND_Y - 160 };
+}
+
+// ================================================================
+//  PLAYER
+// ================================================================
+let player;
+
+function createPlayer() {
+  const ch = CHARACTERS[curCharKey];
+  return {
+    x: 80, y: GND_Y - ch.height,
+    vx: 0, vy: 0,
+    w: ch.width, h: ch.height,
+    onGround: false,
+    dir: 1,
+    invincible: 0,
+  };
+}
+
+// ================================================================
+//  INPUT
+// ================================================================
+const keys = {};
+addEventListener('keydown', e => {
+  keys[e.code] = true;
+  if (e.code === 'Space') e.preventDefault();
+});
+addEventListener('keyup', e => { keys[e.code] = false; });
+
+function jumpPressed() { return keys['Space'] || keys['KeyZ'] || keys['ArrowUp']; }
+
+// ================================================================
+//  HELPERS
+// ================================================================
+function overlaps(ax, ay, aw, ah, bx, by, bw, bh) {
+  return ax < bx + bw && ax + aw > bx && ay < by + bh && ay + ah > by;
+}
+
+function updateHUD() {
+  document.getElementById('uiCoin').textContent  = String(coins).padStart(3, '0');
+  document.getElementById('uiLife').textContent  = String(lives);
+  document.getElementById('uiScore').textContent = String(score).padStart(5, '0');
+}
+
+function spawnParticles(x, y, color, n) {
+  for (let i = 0; i < n; i++) {
+    const angle = (Math.PI * 2 * i) / n + Math.random() * 0.5;
+    const speed = 2 + Math.random() * 3;
+    particles.push({
+      x, y,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed - 2,
+      life: 30 + Math.random() * 20,
+      color,
+    });
+  }
+}
+
+// ================================================================
+//  PLATFORM COLLISION  (AABB push-out)
+// ================================================================
+function resolvePlayerPlatform(p) {
+  if (!overlaps(player.x, player.y, player.w, player.h, p.x, p.y, p.w, p.h)) return;
+
+  const prevBottom = player.y + player.h - player.vy;
+  const prevTop    = player.y - player.vy;
+  const prevRight  = player.x + player.w - player.vx;
+  const prevLeft   = player.x - player.vx;
+
+  if (player.vy >= 0 && prevBottom <= p.y + 6) {
+    // 上から着地
+    player.y = p.y - player.h;
+    player.vy = 0;
+    player.onGround = true;
+  } else if (player.vy < 0 && prevTop >= p.y + p.h - 6) {
+    // 下から当たる
+    player.y = p.y + p.h;
+    player.vy = 2;
+    if (p.type === 'qblock' && !p.hit) {
+      p.hit = true;
+      // コイン出現（上に飛び出す演出）
+      coinItems.push({ x: p.x + 12, y: p.y - 20, col: false, popVy: -6 });
+      coins++; score += 100;
+      updateHUD();
+      spawnParticles(p.x + 20, p.y, '#ffd700', 6);
+    }
+  } else if (player.vx > 0 && prevRight <= p.x + 6) {
+    player.x = p.x - player.w;
+    player.vx = 0;
+  } else if (player.vx < 0 && prevLeft >= p.x + p.w - 6) {
+    player.x = p.x + p.w;
+    player.vx = 0;
+  }
+}
+
+// ================================================================
+//  GAME CONTROL
+// ================================================================
+function resetGame() {
+  lives = 3; coins = 0; score = 0; tick = 0; camX = 0;
+  state = 'playing';
+  buildLevel();
+  player = createPlayer();
+  updateHUD();
+}
+
+function respawn() {
+  state = 'playing';
+  player = createPlayer();
+  camX = 0;
+  particles = [];
+}
+
+// ================================================================
+//  UPDATE
+// ================================================================
+function update() {
+  if (state !== 'playing') {
+    if (keys['KeyR']) { keys['KeyR'] = false; resetGame(); }
+    // パーティクル更新は死亡演出でも続ける
+    updateParticles();
+    return;
+  }
+
+  tick++;
+  const ch = CHARACTERS[curCharKey];
+
+  // ── Player physics ──
+  if (keys['ArrowLeft'] || keys['KeyA']) { player.vx -= 0.8; player.dir = -1; }
+  if (keys['ArrowRight'] || keys['KeyD']) { player.vx += 0.8; player.dir = 1; }
+  player.vx *= 0.78;
+  const maxSpd = ch.speed;
+  if (Math.abs(player.vx) > maxSpd) player.vx = Math.sign(player.vx) * maxSpd;
+
+  // ジャンプ（長押しで高く）
+  if (jumpPressed() && player.onGround) {
+    player.vy = -ch.jumpPower;
+    player.onGround = false;
+  }
+  // 早めにボタンを離すと低いジャンプに
+  if (!jumpPressed() && player.vy < -5) player.vy = -5;
+
+  player.vy = Math.min(player.vy + GRAVITY, 22);
+  player.x += player.vx;
+  player.y += player.vy;
+  player.onGround = false;
+
+  if (player.x < 0) { player.x = 0; player.vx = 0; }
+
+  for (const p of platforms) {
+    if (p.type === 'qblock' && p.hit) continue;
+    resolvePlayerPlatform(p);
+  }
+
+  // 落下死
+  if (player.y > CH + 120) {
+    spawnParticles(player.x + player.w / 2, player.y, '#ff4444', 12);
+    lives--;
+    updateHUD();
+    state = 'dead';
+    if (lives <= 0) setTimeout(() => { state = 'gameover'; }, 1200);
+    else             setTimeout(respawn, 1800);
+    return;
+  }
+
+  // ── コイン収集 ──
+  for (const c of coinItems) {
+    if (c.col) continue;
+    if (c.popVy !== undefined) {
+      c.y += c.popVy;
+      c.popVy += 0.5;
+      if (c.popVy > 0) delete c.popVy;
+    }
+    if (overlaps(player.x, player.y, player.w, player.h,
+                 c.x - 9, c.y - 9, 18, 18)) {
+      c.col = true;
+      coins++; score += 50;
+      spawnParticles(c.x, c.y, '#ffd700', 5);
+      updateHUD();
+    }
+  }
+
+  // ── 敵の更新 ──
+  if (player.invincible > 0) player.invincible--;
+
+  for (const e of enemies) {
+    if (!e.alive) { if (e.dTimer > 0) e.dTimer--; continue; }
+
+    e.x += e.vx;
+    e.vy = Math.min(e.vy + GRAVITY, 20);
+    e.y += e.vy;
+
+    // 敵のプラットフォーム衝突
+    for (const p of platforms) {
+      if (p.type === 'qblock') continue;
+      if (!overlaps(e.x, e.y, e.w, e.h, p.x, p.y, p.w, p.h)) continue;
+      const prevEB = e.y + e.h - e.vy;
+      const prevEL = e.x - e.vx;
+      const prevER = e.x + e.w - e.vx;
+      if (e.vy >= 0 && prevEB <= p.y + 6) {
+        e.y = p.y - e.h; e.vy = 0;
+      } else if (e.vx > 0 && prevER <= p.x + 6) {
+        e.x = p.x - e.w; e.vx *= -1;
+      } else if (e.vx < 0 && prevEL >= p.x + p.w - 6) {
+        e.x = p.x + p.w; e.vx *= -1;
+      }
+    }
+
+    if (e.x < 0) { e.x = 0; e.vx = Math.abs(e.vx); }
+    if (e.y > CH + 100) { e.alive = false; continue; }
+
+    // プレイヤーと敵の衝突
+    if (overlaps(player.x, player.y, player.w, player.h, e.x, e.y, e.w, e.h)) {
+      const stomp = player.vy > 1 && (player.y + player.h) < e.y + 14;
+      if (stomp) {
+        e.alive = false; e.dTimer = 22;
+        player.vy = -8;
+        score += 200;
+        updateHUD();
+        spawnParticles(e.x + e.w / 2, e.y, '#8b4000', 8);
+      } else if (player.invincible === 0) {
+        lives--; updateHUD();
+        player.invincible = 120;
+        spawnParticles(player.x + player.w / 2, player.y + player.h / 2, '#ff4444', 8);
+        if (lives <= 0) { state = 'gameover'; return; }
+      }
+    }
+  }
+
+  // ── ゴール判定 ──
+  if (overlaps(player.x, player.y, player.w, player.h,
+               goal.x, goal.y, 14, 160)) {
+    score += 1000; updateHUD();
+    state = 'win';
+    spawnParticles(goal.x, goal.y + 80, '#ffd700', 20);
+  }
+
+  // ── カメラ ──
+  const targetCam = Math.max(0, player.x - CW / 3);
+  camX += (targetCam - camX) * 0.12;
+
+  updateParticles();
+}
+
+function updateParticles() {
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const p = particles[i];
+    p.x += p.vx; p.y += p.vy; p.vy += 0.3;
+    p.life--;
+    if (p.life <= 0) particles.splice(i, 1);
+  }
+}
+
+// ================================================================
+//  RENDER
+// ================================================================
+function drawBG() {
+  // 空グラデーション
+  const grad = ctx.createLinearGradient(0, 0, 0, CH);
+  grad.addColorStop(0, '#4aa8e8');
+  grad.addColorStop(1, '#c8eeff');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, CW, CH);
+
+  // 丘（視差 0.3）
+  ctx.fillStyle = '#4cac4c';
+  for (let i = 0; i < 7; i++) {
+    const wx  = i * 350;
+    const sx  = ((wx - camX * 0.3) % (7 * 350) + 7 * 350) % (7 * 350) - 175;
+    ctx.beginPath();
+    ctx.ellipse(sx + 175, GND_Y, 175, 90, 0, Math.PI, 0);
+    ctx.fill();
+  }
+  ctx.fillStyle = '#3a9c3a';
+  for (let i = 0; i < 7; i++) {
+    const wx  = i * 300 + 150;
+    const sx  = ((wx - camX * 0.3) % (7 * 300) + 7 * 300) % (7 * 300) - 150;
+    ctx.beginPath();
+    ctx.ellipse(sx + 150, GND_Y, 120, 65, 0, Math.PI, 0);
+    ctx.fill();
+  }
+
+  // 雲（視差 0.15）
+  ctx.fillStyle = '#fff';
+  const cloudBase = [60, 220, 410, 590, 760];
+  cloudBase.forEach(wx => {
+    const sx = ((wx - camX * 0.15) % (CW + 240) + CW + 240) % (CW + 240) - 120;
+    const r  = 28 + (wx % 22);
+    const sy = 50 + (wx % 40);
+    ctx.beginPath();
+    ctx.arc(sx,       sy,       r,         0, Math.PI * 2);
+    ctx.arc(sx + r,   sy + 5,   r * 0.7,   0, Math.PI * 2);
+    ctx.arc(sx - r*0.7, sy + 5, r * 0.6,   0, Math.PI * 2);
+    ctx.fill();
+  });
+}
+
+function drawPlatform(p) {
+  const sx = p.x - camX;
+  if (sx + p.w < -10 || sx > CW + 10) return;
+
+  if (p.type === 'ground') {
+    ctx.fillStyle = '#4cba4c';
+    ctx.fillRect(sx, p.y, p.w, 10);
+    ctx.fillStyle = '#8b6040';
+    ctx.fillRect(sx, p.y + 10, p.w, p.h - 10);
+    ctx.fillStyle = '#7a5030';
+    for (let tx = 0; tx < p.w; tx += 40) {
+      ctx.fillRect(sx + tx, p.y + 14, 36, 2);
+      ctx.fillRect(sx + tx + 20, p.y + 26, 36, 2);
+    }
+    // 草のジグザグ
+    ctx.fillStyle = '#3a9a3a';
+    for (let gx = sx; gx < sx + p.w; gx += 8) {
+      ctx.fillRect(gx + 2, p.y - 3, 2, 5);
+      ctx.fillRect(gx + 6, p.y - 1, 2, 3);
+    }
+
+  } else if (p.type === 'platform') {
+    ctx.fillStyle = '#d4903a';
+    ctx.fillRect(sx, p.y, p.w, p.h);
+    ctx.fillStyle = '#b07020';
+    ctx.fillRect(sx, p.y, p.w, 4);
+    ctx.fillStyle = '#e8b050';
+    for (let tx = 4; tx < p.w - 4; tx += 18) {
+      ctx.fillRect(sx + tx, p.y + 5, 12, 2);
+    }
+
+  } else if (p.type === 'qblock') {
+    const sx2 = sx, sy = p.y;
+    if (p.hit) {
+      ctx.fillStyle = '#b07a40';
+      ctx.fillRect(sx2, sy, 40, 40);
+      ctx.strokeStyle = '#885518';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(sx2 + 1, sy + 1, 38, 38);
+    } else {
+      const pulse = 1 + Math.sin(tick * 0.09) * 0.06;
+      ctx.save();
+      ctx.translate(sx2 + 20, sy + 20);
+      ctx.scale(pulse, pulse);
+      ctx.fillStyle = '#f0b800';
+      ctx.fillRect(-20, -20, 40, 40);
+      ctx.fillStyle = '#c09000';
+      ctx.fillRect(-18, -18, 36, 36);
+      ctx.fillStyle = '#ffe040';
+      ctx.fillRect(-18, -18, 36, 8);
+      ctx.fillStyle = '#fff';
+      ctx.font = 'bold 22px monospace';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('?', 0, 2);
+      ctx.restore();
+    }
+  }
+}
+
+function drawCoins() {
+  for (const c of coinItems) {
+    if (c.col) continue;
+    const sx = c.x - camX;
+    if (sx < -20 || sx > CW + 20) continue;
+    const bob = c.popVy !== undefined ? 0 : Math.sin(tick * 0.09 + c.x * 0.05) * 3;
+    const sy = c.y + bob;
+
+    ctx.fillStyle = '#ffd700';
+    ctx.beginPath();
+    ctx.arc(sx, sy, 8, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#ffee88';
+    ctx.beginPath();
+    ctx.arc(sx - 2, sy - 2, 3.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#c8a000';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(sx, sy, 8, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+}
+
+function drawEnemies() {
+  for (const e of enemies) {
+    if (!e.alive && e.dTimer <= 0) continue;
+    const sx = e.x - camX;
+    if (sx + e.w < -10 || sx > CW + 10) continue;
+
+    if (!e.alive) {
+      // ぺしゃんこ
+      ctx.fillStyle = '#7a3000';
+      ctx.beginPath();
+      ctx.ellipse(sx + e.w / 2, e.y + e.h - 2, e.w / 2 + 3, 5, 0, 0, Math.PI * 2);
+      ctx.fill();
+      continue;
+    }
+
+    const sy   = e.y;
+    const walk = Math.sin(tick * 0.25) * 2;
+
+    // Body
+    ctx.fillStyle = '#8b4000';
+    ctx.beginPath();
+    ctx.ellipse(sx + e.w / 2, sy + e.h * 0.7, e.w / 2, e.h * 0.3, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Head
+    ctx.fillStyle = '#a05820';
+    ctx.beginPath();
+    ctx.arc(sx + e.w / 2, sy + e.h * 0.38, e.w * 0.38, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Eyebrows (angry, facing direction)
+    ctx.fillStyle = '#000';
+    ctx.save();
+    ctx.translate(sx + e.w / 2, sy);
+    if (e.vx < 0) ctx.scale(-1, 1);
+    ctx.fillRect(-e.w * 0.34, e.h * 0.27, e.w * 0.28, 3);
+    ctx.fillRect( e.w * 0.06, e.h * 0.29, e.w * 0.28, 3);
+    ctx.restore();
+
+    // Eyes
+    ctx.fillStyle = '#fff';
+    ctx.beginPath();
+    ctx.arc(sx + e.w / 2 - 7, sy + e.h * 0.39, 4, 0, Math.PI * 2);
+    ctx.arc(sx + e.w / 2 + 7, sy + e.h * 0.39, 4, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#111';
+    ctx.beginPath();
+    ctx.arc(sx + e.w / 2 - 6, sy + e.h * 0.39, 2, 0, Math.PI * 2);
+    ctx.arc(sx + e.w / 2 + 8, sy + e.h * 0.39, 2, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Feet
+    ctx.fillStyle = '#5a2800';
+    ctx.fillRect(sx + 2,      sy + e.h - 7, 11, 7 + walk);
+    ctx.fillRect(sx + e.w - 13, sy + e.h - 7, 11, 7 - walk);
+  }
+}
+
+function drawGoal() {
+  const sx = goal.x - camX;
+  if (sx < -80 || sx > CW + 20) return;
+
+  // 旗ポール
+  ctx.fillStyle = '#bbb';
+  ctx.fillRect(sx, goal.y, 8, 160);
+  ctx.fillStyle = '#999';
+  ctx.fillRect(sx + 2, goal.y, 4, 160);
+
+  // 旗（波）
+  ctx.fillStyle = '#22cc44';
+  ctx.beginPath();
+  ctx.moveTo(sx + 8, goal.y);
+  for (let i = 0; i <= 12; i++) {
+    const frac = i / 12;
+    ctx.lineTo(sx + 8 + frac * 55,
+               goal.y + frac * 30 + Math.sin(tick * 0.16 + frac * 3.5) * 7);
+  }
+  ctx.lineTo(sx + 8, goal.y + 30);
+  ctx.closePath();
+  ctx.fill();
+
+  // 先端の球
+  ctx.fillStyle = '#ffd700';
+  ctx.beginPath();
+  ctx.arc(sx + 4, goal.y, 8, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+function drawPlayer() {
+  if (state === 'dead') return;
+  if (player.invincible > 0 && Math.floor(tick / 4) % 2 === 0) return;
+  const ch = CHARACTERS[curCharKey];
+  ch.draw(ctx, player.x - camX, player.y, player.w, player.h, player.dir, tick);
+}
+
+function drawParticles() {
+  for (const p of particles) {
+    ctx.globalAlpha = Math.max(0, p.life / 50);
+    ctx.fillStyle = p.color;
+    ctx.fillRect(p.x - camX - 3, p.y - 3, 6, 6);
+  }
+  ctx.globalAlpha = 1;
+}
+
+function drawOverlay() {
+  const cx = CW / 2, cy = CH / 2;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'alphabetic';
+
+  if (state === 'dead') {
+    ctx.fillStyle = 'rgba(0,0,0,0.4)';
+    ctx.fillRect(0, 0, CW, CH);
+    ctx.font = 'bold 44px "Courier New"';
+    ctx.fillStyle = '#ff4444';
+    ctx.fillText('ミスした！', cx, cy - 20);
+    ctx.font = '22px "Courier New"';
+    ctx.fillStyle = '#fff';
+    ctx.fillText(`残り ${lives} 機`, cx, cy + 22);
+  } else if (state === 'gameover') {
+    ctx.fillStyle = 'rgba(0,0,0,0.78)';
+    ctx.fillRect(0, 0, CW, CH);
+    ctx.font = 'bold 56px "Courier New"';
+    ctx.fillStyle = '#ff2222';
+    ctx.fillText('GAME OVER', cx, cy - 30);
+    ctx.font = '20px "Courier New"';
+    ctx.fillStyle = '#ffcc00';
+    ctx.fillText(`スコア: ${score}`, cx, cy + 20);
+    ctx.fillStyle = '#888';
+    ctx.fillText('R キーでリスタート', cx, cy + 56);
+  } else if (state === 'win') {
+    ctx.fillStyle = 'rgba(0,0,60,0.68)';
+    ctx.fillRect(0, 0, CW, CH);
+    ctx.font = 'bold 56px "Courier New"';
+    ctx.fillStyle = '#ffd700';
+    ctx.fillText('GOAL！！', cx, cy - 30);
+    ctx.font = '20px "Courier New"';
+    ctx.fillStyle = '#fff';
+    ctx.fillText(`スコア: ${score}`, cx, cy + 20);
+    ctx.fillStyle = '#888';
+    ctx.fillText('R キーで再プレイ', cx, cy + 56);
+  }
+}
+
+// ================================================================
+//  GAME LOOP
+// ================================================================
+function gameLoop() {
+  update();
+
+  drawBG();
+  for (const p of platforms) drawPlatform(p);
+  drawCoins();
+  drawEnemies();
+  drawGoal();
+  drawPlayer();
+  drawParticles();
+  drawOverlay();
+
+  requestAnimationFrame(gameLoop);
+}
+
+// ================================================================
+//  CHARACTER SELECT UI
+// ================================================================
+function buildCharUI() {
+  const div = document.getElementById('charSelect');
+  Object.entries(CHARACTERS).forEach(([key, ch]) => {
+    const btn = document.createElement('button');
+    btn.textContent = ch.name;
+    btn.dataset.key = key;
+    if (key === curCharKey) btn.classList.add('active');
+    btn.onclick = () => {
+      curCharKey = key;
+      div.querySelectorAll('button').forEach(b =>
+        b.classList.toggle('active', b.dataset.key === key));
+      // サイズ更新（プレイ中でも即反映）
+      const newCh = CHARACTERS[key];
+      player.w = newCh.width;
+      player.h = newCh.height;
+    };
+    div.appendChild(btn);
+  });
+}
+
+// ================================================================
+//  INIT
+// ================================================================
+buildCharUI();
+resetGame();
+gameLoop();
+</script>
+</body>
+</html>
