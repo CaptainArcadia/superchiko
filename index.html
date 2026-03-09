@@ -519,6 +519,21 @@ function update() {
 
       if (e.x < 0) { e.x = 0; e.vx = Math.abs(e.vx); }
       if (e.y > CH + 100) { e.alive = false; continue; }
+
+      // 端検出：足元の先に地面がなければ向きを反転（ピット落下防止）
+      if (e.vy === 0) {
+        const frontX = e.vx > 0 ? e.x + e.w + 2 : e.x - 2;
+        const footY  = e.y + e.h + 1;
+        let edgeSafe = false;
+        for (const p of platforms) {
+          if (p.type === 'qblock') continue;
+          if (frontX >= p.x && frontX <= p.x + p.w &&
+              footY  >= p.y && footY  <= p.y + 12) {
+            edgeSafe = true; break;
+          }
+        }
+        if (!edgeSafe) e.vx *= -1;
+      }
     }
 
     // ── プレイヤーとの衝突（地上・浮遊 共通）──
