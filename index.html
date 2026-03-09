@@ -32,20 +32,6 @@
     }
     #bottom { display: flex; flex-direction: column; align-items: center; gap: 6px; }
     #controls { color: #555; font-size: 11px; letter-spacing: 1px; }
-    #charSelect { display: flex; gap: 8px; }
-    #charSelect button {
-      background: #1a1a1a;
-      color: #aaa;
-      border: 2px solid #333;
-      padding: 5px 16px;
-      cursor: pointer;
-      font-family: 'Courier New', monospace;
-      font-size: 13px;
-      border-radius: 4px;
-      transition: all 0.15s;
-    }
-    #charSelect button:hover { background: #2a2a2a; border-color: #666; color: #fff; }
-    #charSelect button.active { background: #112233; border-color: #4488ff; color: #fff; }
   </style>
 </head>
 <body>
@@ -59,7 +45,6 @@
   <canvas id="c" width="800" height="480"></canvas>
   <div id="bottom">
     <div id="controls">← → 移動 &nbsp;|&nbsp; Z / Space = ジャンプ（長押しで高く） &nbsp;|&nbsp; ↓ = しゃがみ &nbsp;|&nbsp; R = リスタート</div>
-    <div id="charSelect"></div>
   </div>
 
 <script>
@@ -134,169 +119,6 @@ const CHARACTERS = {
         return;
       }
       ctx.drawImage(img, x, y, w, h);
-    },
-  },
-
-  robot: {
-    name: 'ロボット',
-    speed: 4.0,
-    jumpPower: 12.5,
-    width: 34,
-    height: 42,
-    draw(ctx, x, y, w, h, dir, t) {
-      ctx.save();
-
-      // Antenna
-      ctx.fillStyle = '#666';
-      ctx.fillRect(x + w / 2 - 2, y, 4, 9);
-      ctx.fillStyle = `hsl(${t * 6 % 360},100%,60%)`;
-      ctx.beginPath();
-      ctx.arc(x + w / 2, y, 5, 0, Math.PI * 2);
-      ctx.fill();
-
-      // Head
-      ctx.fillStyle = '#b0b0b0';
-      ctx.fillRect(x + 4, y + 7, w - 8, h / 3);
-      ctx.fillStyle = '#888';
-      ctx.fillRect(x + 4, y + 7, w - 8, 4);
-
-      // Visor
-      ctx.fillStyle = '#001';
-      ctx.fillRect(x + 7, y + 13, w - 14, 10);
-      const glow = 0.4 + Math.sin(t * 0.1) * 0.3;
-      ctx.fillStyle = `rgba(0,255,255,${glow})`;
-      ctx.fillRect(x + 7, y + 13, w - 14, 10);
-      ctx.fillStyle = '#0ff';
-      ctx.fillRect(x + 9,      y + 15, 8, 5);
-      ctx.fillRect(x + w - 17, y + 15, 8, 5);
-
-      // Body
-      ctx.fillStyle = '#999';
-      ctx.fillRect(x + 2, y + h / 3 + 5, w - 4, h / 2);
-      ctx.fillStyle = '#777';
-      ctx.fillRect(x + 2, y + h / 3 + 5, w - 4, 3);
-
-      // Chest core
-      ctx.fillStyle = `hsl(${t * 4 % 360},80%,60%)`;
-      ctx.beginPath();
-      ctx.arc(x + w / 2, y + h * 0.55, 6, 0, Math.PI * 2);
-      ctx.fill();
-
-      // Arms
-      const aOff = Math.sin(t * 0.15) * 5;
-      ctx.fillStyle = '#777';
-      ctx.fillRect(x - 6,     y + h / 3 + 7 + aOff, 8, 16);
-      ctx.fillRect(x + w - 2, y + h / 3 + 7 - aOff, 8, 16);
-      ctx.fillStyle = '#555';
-      ctx.fillRect(x - 8,     y + h / 3 + 21, 10, 6);
-      ctx.fillRect(x + w - 2, y + h / 3 + 21, 10, 6);
-
-      // Legs
-      const lOff = Math.sin(t * 0.2) * 5;
-      ctx.fillStyle = '#777';
-      ctx.fillRect(x + 6,      y + h * 5 / 6, 11, h / 6 + lOff);
-      ctx.fillRect(x + w - 17, y + h * 5 / 6, 11, h / 6 - lOff);
-      ctx.fillStyle = '#444';
-      ctx.fillRect(x + 2,      y + h - 8, 16, 8);
-      ctx.fillRect(x + w - 18, y + h - 8, 16, 8);
-
-      ctx.restore();
-    },
-  },
-
-  cat: {
-    name: 'ねこ',
-    speed: 5.2,
-    jumpPower: 14,
-    width: 30,
-    height: 36,
-    draw(ctx, x, y, w, h, dir, t) {
-      ctx.save();
-      if (dir < 0) { ctx.translate(x + w, 0); ctx.scale(-1, 1); x = 0; }
-
-      // Tail
-      const tw = Math.sin(t * 0.13) * 10;
-      ctx.strokeStyle = '#f97d2a';
-      ctx.lineWidth = 6;
-      ctx.lineCap = 'round';
-      ctx.beginPath();
-      ctx.moveTo(x + 5, y + h - 5);
-      ctx.quadraticCurveTo(x - 18, y + h + tw, x - 10, y + h - 16);
-      ctx.stroke();
-
-      // Body
-      ctx.fillStyle = '#f97d2a';
-      ctx.beginPath();
-      ctx.ellipse(x + w / 2, y + h * 0.65, w / 2 - 1, h * 0.32, 0, 0, Math.PI * 2);
-      ctx.fill();
-
-      // Belly
-      ctx.fillStyle = '#ffddb8';
-      ctx.beginPath();
-      ctx.ellipse(x + w / 2, y + h * 0.68, w / 3, h * 0.2, 0, 0, Math.PI * 2);
-      ctx.fill();
-
-      // Head
-      ctx.fillStyle = '#f97d2a';
-      ctx.beginPath();
-      ctx.arc(x + w / 2, y + h * 0.33, w / 2, 0, Math.PI * 2);
-      ctx.fill();
-
-      // Ears
-      for (const ex of [x + 4, x + w - 14]) {
-        const cx = ex < x + w / 2 ? ex + 9 : ex + 5;
-        ctx.fillStyle = '#f97d2a';
-        ctx.beginPath();
-        ctx.moveTo(ex, y + h * 0.33 - 4);
-        ctx.lineTo(cx, y + 1);
-        ctx.lineTo(ex + 10, y + h * 0.33 - 4);
-        ctx.fill();
-        ctx.fillStyle = '#ffb0cc';
-        ctx.beginPath();
-        ctx.moveTo(ex + 2, y + h * 0.33 - 3);
-        ctx.lineTo(cx, y + 3);
-        ctx.lineTo(ex + 8, y + h * 0.33 - 3);
-        ctx.fill();
-      }
-
-      // Eyes
-      ctx.fillStyle = '#2ecc71';
-      ctx.beginPath();
-      ctx.ellipse(x + w / 2 - 7, y + h * 0.31, 4, 5, 0, 0, Math.PI * 2);
-      ctx.ellipse(x + w / 2 + 7, y + h * 0.31, 4, 5, 0, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = '#111';
-      ctx.beginPath();
-      ctx.ellipse(x + w / 2 - 7, y + h * 0.31, 2, 4, 0, 0, Math.PI * 2);
-      ctx.ellipse(x + w / 2 + 7, y + h * 0.31, 2, 4, 0, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = '#fff';
-      ctx.fillRect(x + w / 2 - 9, y + h * 0.28, 2, 2);
-      ctx.fillRect(x + w / 2 + 5, y + h * 0.28, 2, 2);
-
-      // Nose
-      ctx.fillStyle = '#ff9988';
-      ctx.beginPath();
-      ctx.arc(x + w / 2, y + h * 0.37, 3, 0, Math.PI * 2);
-      ctx.fill();
-
-      // Whiskers
-      ctx.strokeStyle = 'rgba(255,255,255,0.75)';
-      ctx.lineWidth = 1;
-      for (let i = -1; i <= 1; i++) {
-        ctx.beginPath();
-        ctx.moveTo(x + w / 2, y + h * 0.37);
-        ctx.lineTo(x + w / 2 + 22, y + h * 0.37 + i * 4);
-        ctx.stroke();
-      }
-
-      // Paws
-      const run = t % 18 < 9;
-      ctx.fillStyle = '#f97d2a';
-      ctx.fillRect(x + 2, y + h - (run ? 11 : 9), 10, run ? 11 : 9);
-      ctx.fillRect(x + w - 12, y + h - (run ? 7 : 9), 10, run ? 7 : 9);
-
-      ctx.restore();
     },
   },
 
@@ -390,17 +212,33 @@ function buildLevel() {
     platforms.push({ x, y, w: 40, h: 40, type: 'qblock', hit: false });
   });
 
-  // 敵 [x, groundY, dir]
+  // 地上敵 & 足場敵 [x, groundY, dir]
+  // 地面セグメントごとに均等配置 + 足場上にも追加
   [
-    [310,  GND_Y, 1], [620,  GND_Y, -1], [870,  GND_Y, 1],
-    [1110, GND_Y, -1],[1460, GND_Y, 1],  [1710, GND_Y, -1],
-    [1960, GND_Y, 1], [2420, GND_Y, -1], [2720, GND_Y, 1],
-    [2920, GND_Y, -1],[3370, GND_Y, 1],  [3620, GND_Y, -1],
-    [3870, GND_Y, 1], [4270, GND_Y, -1], [4520, GND_Y, 1],
-    [4720, GND_Y, -1],[5070, GND_Y, 1],  [5250, GND_Y, -1],
-    // 足場の上
-    [190,  320, 1], [830,  315, -1], [1460, 295, 1],
-    [2480, 315, -1],[3540, 315, 1],  [4410, 255, -1],
+    // セグメント1: [0, 1200]
+    [ 250, GND_Y,  1], [ 450, GND_Y, -1], [ 650, GND_Y,  1],
+    [ 860, GND_Y, -1], [1060, GND_Y,  1],
+    // セグメント2: [1350, 2200]
+    [1440, GND_Y, -1], [1620, GND_Y,  1], [1800, GND_Y, -1],
+    [1990, GND_Y,  1], [2160, GND_Y, -1],
+    // セグメント3: [2380, 3150]
+    [2470, GND_Y,  1], [2650, GND_Y, -1], [2840, GND_Y,  1],
+    [3020, GND_Y, -1], [3120, GND_Y,  1],
+    // セグメント4: [3300, 4050]
+    [3390, GND_Y, -1], [3570, GND_Y,  1], [3760, GND_Y, -1],
+    [3950, GND_Y,  1],
+    // セグメント5: [4200, 4950]
+    [4280, GND_Y, -1], [4460, GND_Y,  1], [4650, GND_Y, -1],
+    [4840, GND_Y,  1], [4920, GND_Y, -1],
+    // セグメント6: [5050, 5400]
+    [5110, GND_Y,  1], [5260, GND_Y, -1], [5370, GND_Y,  1],
+    // 足場の上（レベル全体に散らす）
+    [ 190, 320,  1], [ 510, 330, -1], [ 840, 315,  1],
+    [1290, 275, -1], [1770, 315,  1], [1950, 265, -1],
+    [2490, 315,  1], [2990, 275, -1],
+    [3380, 275,  1], [3550, 315, -1],
+    [4250, 315,  1], [4420, 255, -1],
+    [4930, 315,  1], [5140, 315, -1],
   ].forEach(([ex, gy, dir]) => {
     enemies.push({ x: ex, y: gy - 30, vx: dir * 1.5, vy: 0,
                    w: 38, h: 30, alive: true, dTimer: 0, type: 'ground' });
@@ -1012,43 +850,8 @@ function gameLoop() {
 }
 
 // ================================================================
-//  CHARACTER SELECT UI
-// ================================================================
-function buildCharUI() {
-  const div = document.getElementById('charSelect');
-  Object.entries(CHARACTERS).forEach(([key, ch]) => {
-    const btn = document.createElement('button');
-    btn.textContent = ch.name;
-    btn.dataset.key = key;
-    if (key === curCharKey) btn.classList.add('active');
-    btn.onclick = () => {
-      // しゃがみ中なら先に解除（足元位置を保持）
-      if (player.crouching) {
-        const oldCh = CHARACTERS[curCharKey];
-        if (oldCh.crouchW) {
-          const oldBottom = player.y + player.h;
-          player.h = oldCh.height;
-          player.w = oldCh.width;
-          player.y = oldBottom - player.h;
-          player.crouching = false;
-        }
-      }
-      curCharKey = key;
-      div.querySelectorAll('button').forEach(b =>
-        b.classList.toggle('active', b.dataset.key === key));
-      // サイズ更新（プレイ中でも即反映）
-      const newCh = CHARACTERS[key];
-      player.w = newCh.width;
-      player.h = newCh.height;
-    };
-    div.appendChild(btn);
-  });
-}
-
-// ================================================================
 //  INIT
 // ================================================================
-buildCharUI();
 resetGame();
 gameLoop();
 </script>
