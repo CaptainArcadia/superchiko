@@ -66,6 +66,23 @@
 'use strict';
 
 // ================================================================
+//  BGM
+//  ブラウザの自動再生ポリシーにより、最初のキー入力 or クリックで再生開始
+// ================================================================
+const bgm = new Audio('assets/bgm.mp3');
+bgm.loop   = true;
+bgm.volume = 0.5;
+
+let bgmStarted = false;
+function tryStartBGM() {
+  if (bgmStarted) return;
+  bgmStarted = true;
+  bgm.play().catch(() => {}); // ポリシーで弾かれても無視
+}
+addEventListener('keydown',  tryStartBGM, { once: false });
+addEventListener('pointerdown', tryStartBGM, { once: false });
+
+// ================================================================
 //  SPRITE IMAGES  (ちーこ用)
 //  左向き:chi1  右向き:chi2  ジャンプ:chi3  しゃがみ:chi4
 // ================================================================
