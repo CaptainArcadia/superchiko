@@ -58,12 +58,23 @@
   </div>
   <canvas id="c" width="800" height="480"></canvas>
   <div id="bottom">
-    <div id="controls">← → 移動 &nbsp;|&nbsp; Z / Space = ジャンプ（長押しで高く） &nbsp;|&nbsp; R = リスタート</div>
+    <div id="controls">← → 移動 &nbsp;|&nbsp; Z / Space = ジャンプ（長押しで高く） &nbsp;|&nbsp; ↓ = しゃがみ &nbsp;|&nbsp; R = リスタート</div>
     <div id="charSelect"></div>
   </div>
 
 <script>
 'use strict';
+
+// ================================================================
+//  SPRITE IMAGES  (ちーこ用)
+//  左向き:chi1  右向き:chi2  ジャンプ:chi3  しゃがみ:chi4
+// ================================================================
+const imgs = {};
+['chi1', 'chi2', 'chi3', 'chi4'].forEach(name => {
+  const img = new Image();
+  img.src = `assets/${name}.png`;
+  imgs[name] = img;
+});
 
 // ================================================================
 //  ★ CHARACTER DEFINITIONS ★
@@ -73,62 +84,29 @@
 // ================================================================
 const CHARACTERS = {
 
-  mario: {
-    name: 'マリオ',
+  chiiko: {
+    name: 'ちーこ',
     speed: 4.5,
     jumpPower: 13.5,
-    width: 32,
-    height: 40,
-    draw(ctx, x, y, w, h, dir, t) {
-      ctx.save();
-      if (dir < 0) { ctx.translate(x + w, 0); ctx.scale(-1, 1); x = 0; }
-      const run = t % 18 < 9;
+    width: 36,    // 通常時のヒットボックス幅
+    height: 48,   // 通常時のヒットボックス高さ
+    crouchW: 42,  // しゃがみ時の幅
+    crouchH: 28,  // しゃがみ時の高さ
+    // pstate: 'stand' | 'walk' | 'jump' | 'crouch'
+    draw(ctx, x, y, w, h, dir, t, pstate) {
+      let img;
+      if      (pstate === 'crouch') img = imgs.chi4;
+      else if (pstate === 'jump')   img = imgs.chi3;
+      else if (dir < 0)             img = imgs.chi1;
+      else                          img = imgs.chi2;
 
-      // Shoes
-      ctx.fillStyle = '#5c2800';
-      ctx.fillRect(x,     y + h - 8, 14, 8);
-      ctx.fillRect(x + w - 14, y + h - 8, 14, 8);
-
-      // Overalls
-      ctx.fillStyle = '#1a3ee8';
-      ctx.fillRect(x + 4, y + h / 2, w - 8, h / 2 - 8);
-      ctx.fillRect(x + 8, y + h / 2 - 6, w - 16, 10); // bib
-
-      // Shirt
-      ctx.fillStyle = '#e52222';
-      ctx.fillRect(x + 2, y + h / 2 - 8, w - 4, h / 4 + 8);
-
-      // Arms
-      ctx.fillStyle = '#ffcc88';
-      if (run) {
-        ctx.fillRect(x - 2, y + h / 2, 6, 12);
-        ctx.fillRect(x + w - 4, y + h / 2 + 4, 6, 12);
-      } else {
-        ctx.fillRect(x - 2, y + h / 2 + 2, 6, 12);
-        ctx.fillRect(x + w - 4, y + h / 2 + 2, 6, 12);
+      if (!img || !img.complete || !img.naturalWidth) {
+        // 画像未ロード時フォールバック
+        ctx.fillStyle = '#ff88cc';
+        ctx.fillRect(x, y, w, h);
+        return;
       }
-
-      // Head
-      ctx.fillStyle = '#ffcc88';
-      ctx.fillRect(x + 6, y + 10, w - 12, h / 3);
-
-      // Hat brim + top
-      ctx.fillStyle = '#e52222';
-      ctx.fillRect(x + 2, y + 6,  w - 4,  8);
-      ctx.fillRect(x + 6, y,      w - 12, 10);
-      ctx.fillStyle = '#c01818';
-      ctx.fillRect(x + 6, y + 8,  w - 12, 2);
-
-      // Eye
-      ctx.fillStyle = '#111';
-      ctx.fillRect(x + w - 13, y + 14, 4, 4);
-
-      // Mustache
-      ctx.fillStyle = '#7a3a00';
-      ctx.fillRect(x + 7,  y + 21, 16, 3);
-      ctx.fillRect(x + 11, y + 24, 10, 3);
-
-      ctx.restore();
+      ctx.drawImage(img, x, y, w, h);
     },
   },
 
@@ -300,16 +278,19 @@ const CHARACTERS = {
   //   name: '新キャラ',
   //   speed: 4,
   //   jumpPower: 13,
-  //   width: 32,
-  //   height: 40,
-  //   draw(ctx, x, y, w, h, dir, t) {
+  //   width: 36,
+  //   height: 48,
+  //   crouchW: 42,   // しゃがみ対応する場合のみ追加
+  //   crouchH: 28,   // しゃがみ対応する場合のみ追加
+  //   // pstate: 'stand'|'walk'|'jump'|'crouch'
+  //   draw(ctx, x, y, w, h, dir, t, pstate) {
   //     // ここに描画処理を書く
   //   },
   // },
 };
 
 // ★ デフォルトキャラクター
-let curCharKey = 'mario';
+let curCharKey = 'chiiko';
 
 // ================================================================
 //  GAME CONSTANTS
@@ -427,6 +408,7 @@ function createPlayer() {
     onGround: false,
     dir: 1,
     invincible: 0,
+    crouching: false,
   };
 }
 
@@ -436,7 +418,7 @@ function createPlayer() {
 const keys = {};
 addEventListener('keydown', e => {
   keys[e.code] = true;
-  if (e.code === 'Space') e.preventDefault();
+  if (e.code === 'Space' || e.code === 'ArrowDown') e.preventDefault();
 });
 addEventListener('keyup', e => { keys[e.code] = false; });
 
@@ -538,15 +520,37 @@ function update() {
   tick++;
   const ch = CHARACTERS[curCharKey];
 
+  // ── しゃがみ処理（onGroundは前フレームの値を使用）──
+  if (ch.crouchW) {
+    const wantCrouch = keys['ArrowDown'] && player.onGround;
+    if (wantCrouch && !player.crouching) {
+      player.crouching = true;
+      const oldBottom = player.y + player.h;
+      player.w = ch.crouchW;
+      player.h = ch.crouchH;
+      player.y = oldBottom - player.h;   // 足元の位置を維持
+    } else if (!wantCrouch && player.crouching) {
+      player.crouching = false;
+      const oldBottom = player.y + player.h;
+      player.w = ch.width;
+      player.h = ch.height;
+      player.y = oldBottom - player.h;
+    }
+  }
+
   // ── Player physics ──
-  if (keys['ArrowLeft'] || keys['KeyA']) { player.vx -= 0.8; player.dir = -1; }
-  if (keys['ArrowRight'] || keys['KeyD']) { player.vx += 0.8; player.dir = 1; }
+  if (!player.crouching) {
+    if (keys['ArrowLeft'] || keys['KeyA']) { player.vx -= 0.8; player.dir = -1; }
+    if (keys['ArrowRight'] || keys['KeyD']) { player.vx += 0.8; player.dir = 1; }
+  } else {
+    player.vx *= 0.75; // しゃがみ中は素早く減速
+  }
   player.vx *= 0.78;
   const maxSpd = ch.speed;
   if (Math.abs(player.vx) > maxSpd) player.vx = Math.sign(player.vx) * maxSpd;
 
-  // ジャンプ（長押しで高く）
-  if (jumpPressed() && player.onGround) {
+  // ジャンプ（長押しで高く、しゃがみ中は不可）
+  if (jumpPressed() && player.onGround && !player.crouching) {
     player.vy = -ch.jumpPower;
     player.onGround = false;
   }
@@ -884,7 +888,11 @@ function drawPlayer() {
   if (state === 'dead') return;
   if (player.invincible > 0 && Math.floor(tick / 4) % 2 === 0) return;
   const ch = CHARACTERS[curCharKey];
-  ch.draw(ctx, player.x - camX, player.y, player.w, player.h, player.dir, tick);
+  const pstate = player.crouching        ? 'crouch'
+               : !player.onGround        ? 'jump'
+               : Math.abs(player.vx) > 0.3 ? 'walk'
+               : 'stand';
+  ch.draw(ctx, player.x - camX, player.y, player.w, player.h, player.dir, tick, pstate);
 }
 
 function drawParticles() {
@@ -964,6 +972,17 @@ function buildCharUI() {
     btn.dataset.key = key;
     if (key === curCharKey) btn.classList.add('active');
     btn.onclick = () => {
+      // しゃがみ中なら先に解除（足元位置を保持）
+      if (player.crouching) {
+        const oldCh = CHARACTERS[curCharKey];
+        if (oldCh.crouchW) {
+          const oldBottom = player.y + player.h;
+          player.h = oldCh.height;
+          player.w = oldCh.width;
+          player.y = oldBottom - player.h;
+          player.crouching = false;
+        }
+      }
       curCharKey = key;
       div.querySelectorAll('button').forEach(b =>
         b.classList.toggle('active', b.dataset.key === key));
