@@ -44,7 +44,7 @@
   </div>
   <canvas id="c" width="800" height="480"></canvas>
   <div id="bottom">
-    <div id="controls">← → 移動 &nbsp;|&nbsp; Z / Space = ジャンプ（長押しで高く） &nbsp;|&nbsp; ↓ = しゃがみ &nbsp;|&nbsp; R = リスタート &nbsp;|&nbsp; 0 = レーザー</div>
+    <div id="controls">← → 移動 &nbsp;|&nbsp; ↑ = ジャンプ（長押しで高く） &nbsp;|&nbsp; ↓ = しゃがみ &nbsp;|&nbsp; Space = レーザー &nbsp;|&nbsp; R = リスタート</div>
   </div>
 
 <script>
@@ -310,11 +310,11 @@ function createPlayer() {
 const keys = {};
 addEventListener('keydown', e => {
   keys[e.code] = true;
-  if (e.code === 'Space' || e.code === 'ArrowDown') e.preventDefault();
+  if (e.code === 'Space' || e.code === 'ArrowDown' || e.code === 'ArrowUp') e.preventDefault();
 });
 addEventListener('keyup', e => { keys[e.code] = false; });
 
-function jumpPressed() { return keys['Space'] || keys['KeyZ'] || keys['ArrowUp']; }
+function jumpPressed() { return keys['ArrowUp']; }
 
 // ================================================================
 //  HELPERS
@@ -514,8 +514,8 @@ function update() {
   }
 
   // ── レーザー発射（0キー、1回限り）──
-  if ((keys['Digit0'] || keys['Numpad0']) && laserReady && !laser) {
-    keys['Digit0'] = keys['Numpad0'] = false;
+  if (keys['Space'] && laserReady && !laser) {
+    keys['Space'] = false;
     laserReady = false;
     const laserH = player.h * 2;
     laser = {
@@ -915,7 +915,7 @@ function drawHUDExtras() {
   ctx.shadowColor = '#0088ff'; ctx.shadowBlur = 8;
   ctx.font = 'bold 14px "Courier New"';
   ctx.textAlign = 'left'; ctx.textBaseline = 'top';
-  ctx.fillText('LASER [0]', 8, 8);
+  ctx.fillText('LASER [Space]', 8, 8);
   ctx.restore();
 }
 
