@@ -44,7 +44,7 @@
   </div>
   <canvas id="c" width="800" height="480"></canvas>
   <div id="bottom">
-    <div id="controls">← → 移動 &nbsp;|&nbsp; Z / Space = ジャンプ（長押しで高く） &nbsp;|&nbsp; ↓ = しゃがみ &nbsp;|&nbsp; R = リスタート</div>
+    <div id="controls">← → 移動 &nbsp;|&nbsp; Z / Space = ジャンプ（長押しで高く） &nbsp;|&nbsp; ↓ = しゃがみ &nbsp;|&nbsp; R = リスタート &nbsp;|&nbsp; 0 = レーザー</div>
   </div>
 
 <script>
@@ -153,12 +153,14 @@ const LEVEL_W  = 5400;  // レベル全体の幅
 // ================================================================
 //  GAME STATE
 // ================================================================
-let state  = 'playing'; // 'playing' | 'dead' | 'gameover' | 'win'
-let lives  = 3;
-let coins  = 0;
-let score  = 0;
-let tick   = 0;
-let camX   = 0;
+let state      = 'playing'; // 'playing' | 'dead' | 'gameover' | 'win'
+let lives      = 3;
+let coins      = 0;
+let score      = 0;
+let tick       = 0;
+let camX       = 0;
+let laserReady = false;   // レーザー使用可能フラグ
+let laser      = null;    // { x, y, h, timer } | null
 
 const canvas = document.getElementById('c');
 const ctx    = canvas.getContext('2d');
@@ -166,13 +168,14 @@ const ctx    = canvas.getContext('2d');
 // ================================================================
 //  LEVEL DATA
 // ================================================================
-let platforms, enemies, coinItems, goal, particles;
+let platforms, enemies, coinItems, laserItems, goal, particles;
 
 function buildLevel() {
-  platforms = [];
-  enemies   = [];
-  coinItems = [];
-  particles = [];
+  platforms  = [];
+  enemies    = [];
+  coinItems  = [];
+  laserItems = [];
+  particles  = [];
 
   // 地面セグメント [startX, endX]
   [
@@ -202,14 +205,16 @@ function buildLevel() {
     platforms.push({ x, y, w, h: 20, type: 'platform' });
   });
 
-  // ？ブロック [x, y]
+  // ？ブロック [x, y]  ※3個目(i===2, x=680)がレーザーブロック
+  // 各ブロックはその真下の足場から48px（1キャラ分）上に配置
   [
-    [210, 245], [360, 205], [680, 215], [1010, 185],
-    [1300, 205], [1660, 175], [2010, 205], [2640, 185],
-    [3010, 205], [3570, 205], [3870, 215], [4420, 185],
-    [4750, 205], [5150, 185],
-  ].forEach(([x, y]) => {
-    platforms.push({ x, y, w: 40, h: 40, type: 'qblock', hit: false });
+    [210, 232], [360, 187], [680, 192], [1010, 167],
+    [1300, 187], [1660, 157], [2010, 177], [2640, 167],
+    [3010, 187], [3570, 205], [3870, 215], [4420, 167],
+    [4750, 192], [5150, 185],
+  ].forEach(([x, y], i) => {
+    platforms.push({ x, y, w: 40, h: 40, type: 'qblock', hit: false,
+                     laserBlock: i === 2 });
   });
 
   // 地上敵 & 足場敵 [x, groundY, dir]
@@ -360,11 +365,17 @@ function resolvePlayerPlatform(p) {
     player.vy = 2;
     if (p.type === 'qblock' && !p.hit) {
       p.hit = true;
-      // コイン出現（上に飛び出す演出）
-      coinItems.push({ x: p.x + 12, y: p.y - 20, col: false, popVy: -6 });
-      coins++; score += 100;
-      updateHUD();
-      spawnParticles(p.x + 20, p.y, '#ffd700', 6);
+      if (p.laserBlock) {
+        // レーザーアイテム出現
+        laserItems.push({ x: p.x + 12, y: p.y - 20, col: false, popVy: -6 });
+        spawnParticles(p.x + 20, p.y, '#00eeff', 8);
+      } else {
+        // コイン出現（上に飛び出す演出）
+        coinItems.push({ x: p.x + 12, y: p.y - 20, col: false, popVy: -6 });
+        coins++; score += 100;
+        updateHUD();
+        spawnParticles(p.x + 20, p.y, '#ffd700', 6);
+      }
     }
   } else if (player.vx > 0 && prevRight <= p.x + 6) {
     player.x = p.x - player.w;
@@ -380,6 +391,7 @@ function resolvePlayerPlatform(p) {
 // ================================================================
 function resetGame() {
   lives = 3; coins = 0; score = 0; tick = 0; camX = 0;
+  laserReady = false; laser = null;
   state = 'playing';
   buildLevel();
   player = createPlayer();
@@ -391,6 +403,7 @@ function respawn() {
   player = createPlayer();
   camX = 0;
   particles = [];
+  laser = null;
 }
 
 // ================================================================
@@ -453,7 +466,6 @@ function update() {
   if (player.x < 0) { player.x = 0; player.vx = 0; }
 
   for (const p of platforms) {
-    if (p.type === 'qblock' && p.hit) continue;
     resolvePlayerPlatform(p);
   }
 
@@ -484,6 +496,44 @@ function update() {
       updateHUD();
     }
   }
+
+  // ── レーザーアイテム収集 ──
+  for (const item of laserItems) {
+    if (item.col) continue;
+    if (item.popVy !== undefined) {
+      item.y += item.popVy;
+      item.popVy += 0.5;
+      if (item.popVy > 0) delete item.popVy;
+    }
+    if (overlaps(player.x, player.y, player.w, player.h,
+                 item.x - 12, item.y - 12, 24, 24)) {
+      item.col = true;
+      laserReady = true;
+      spawnParticles(item.x, item.y, '#00eeff', 8);
+    }
+  }
+
+  // ── レーザー発射（0キー、1回限り）──
+  if ((keys['Digit0'] || keys['Numpad0']) && laserReady && !laser) {
+    keys['Digit0'] = keys['Numpad0'] = false;
+    laserReady = false;
+    const laserH = player.h * 2;
+    laser = {
+      x: player.x + player.w,
+      y: player.y + player.h / 2 - laserH / 2,
+      h: laserH,
+      timer: 40,
+    };
+    for (const e of enemies) {
+      if (e.alive) {
+        e.alive = false; e.dTimer = 22;
+        score += 200;
+        spawnParticles(e.x + e.w / 2, e.y + e.h / 2, '#ff8800', 8);
+      }
+    }
+    updateHUD();
+  }
+  if (laser) { laser.timer--; if (laser.timer <= 0) laser = null; }
 
   // ── 敵の更新 ──
   if (player.invincible > 0) player.invincible--;
@@ -807,6 +857,61 @@ function drawParticles() {
   ctx.globalAlpha = 1;
 }
 
+function drawLaserItems() {
+  for (const item of laserItems) {
+    if (item.col) continue;
+    const sx = item.x - camX;
+    if (sx < -20 || sx > CW + 20) continue;
+    const bob = item.popVy !== undefined ? 0 : Math.sin(tick * 0.1 + item.x * 0.05) * 3;
+    const sy = item.y + bob;
+    ctx.save();
+    // 外側グロー
+    ctx.fillStyle = '#00eeff44';
+    ctx.beginPath(); ctx.arc(sx, sy, 16, 0, Math.PI * 2); ctx.fill();
+    // 本体
+    ctx.fillStyle = '#00eeff';
+    ctx.beginPath(); ctx.arc(sx, sy, 11, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = '#0088ff'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(sx, sy, 11, 0, Math.PI * 2); ctx.stroke();
+    // "L" ラベル
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 13px monospace';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('L', sx, sy);
+    ctx.restore();
+  }
+}
+
+function drawLaser() {
+  if (!laser) return;
+  const alpha = Math.min(1, laser.timer / 10);
+  const sx = laser.x - camX;
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  // 外側グロー
+  ctx.fillStyle = '#0044ff33';
+  ctx.fillRect(sx - 4, laser.y - 12, CW + 20, laser.h + 24);
+  // メインビーム（左から右へグラデーション）
+  const grad = ctx.createLinearGradient(sx, 0, CW, 0);
+  grad.addColorStop(0,    '#ffffff');
+  grad.addColorStop(0.05, '#00eeff');
+  grad.addColorStop(1,    '#0044ffaa');
+  ctx.fillStyle = grad;
+  ctx.fillRect(sx, laser.y, CW + 20, laser.h);
+  ctx.restore();
+}
+
+function drawHUDExtras() {
+  if (!laserReady) return;
+  ctx.save();
+  ctx.fillStyle = '#00eeff';
+  ctx.shadowColor = '#0088ff'; ctx.shadowBlur = 8;
+  ctx.font = 'bold 14px "Courier New"';
+  ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+  ctx.fillText('LASER [0]', 8, 8);
+  ctx.restore();
+}
+
 function drawOverlay() {
   const cx = CW / 2, cy = CH / 2;
   ctx.textAlign = 'center';
@@ -855,10 +960,13 @@ function gameLoop() {
   drawBG();
   for (const p of platforms) drawPlatform(p);
   drawCoins();
+  drawLaserItems();
   drawEnemies();
   drawGoal();
   drawPlayer();
+  drawLaser();
   drawParticles();
+  drawHUDExtras();
   drawOverlay();
 
   requestAnimationFrame(gameLoop);
