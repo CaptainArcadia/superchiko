@@ -44,7 +44,7 @@
   </div>
   <canvas id="c" width="800" height="480"></canvas>
   <div id="bottom">
-    <div id="controls">← → 移動 &nbsp;|&nbsp; ↑ / Space = ジャンプ（長押しで高く） &nbsp;|&nbsp; ↓ = しゃがみ &nbsp;|&nbsp; 左Ctrl = レーザー &nbsp;|&nbsp; R = リスタート</div>
+    <div id="controls">← → 移動 &nbsp;|&nbsp; ↑ / Space = ジャンプ（2段可・長押しで高く） &nbsp;|&nbsp; Shift = ダッシュ &nbsp;|&nbsp; ↓ = しゃがみ &nbsp;|&nbsp; 左Ctrl = レーザー &nbsp;|&nbsp; R = リスタート</div>
   </div>
 
 <script>
@@ -301,6 +301,11 @@ function createPlayer() {
     dir: 1,
     invincible: 0,
     crouching: false,
+    jumpsLeft: 2,       // 2段ジャンプ残り回数
+    prevJump: false,    // ジャンプキー前フレーム状態
+    dashTimer: 0,       // ダッシュ残りフレーム
+    dashCooldown: 0,    // ダッシュ再使用クールダウン
+    prevShift: false,   // Shiftキー前フレーム状態
   };
 }
 
@@ -359,6 +364,7 @@ function resolvePlayerPlatform(p) {
     player.y = p.y - player.h;
     player.vy = 0;
     player.onGround = true;
+    player.jumpsLeft = 2;   // 着地で2段ジャンプ回復
   } else if (player.vy < 0 && prevTop >= p.y + p.h - 6) {
     // 下から当たる
     player.y = p.y + p.h;
@@ -438,6 +444,18 @@ function update() {
     }
   }
 
+  // ── ダッシュ（Shift、クールダウン付き）──
+  if (player.dashCooldown > 0) player.dashCooldown--;
+  if (player.dashTimer > 0)    player.dashTimer--;
+  const shiftDown = (keys['ShiftLeft'] || keys['ShiftRight']) && !player.prevShift;
+  player.prevShift = !!(keys['ShiftLeft'] || keys['ShiftRight']);
+  if (shiftDown && player.dashCooldown === 0 && !player.crouching) {
+    player.dashTimer = 16;
+    player.dashCooldown = 52;
+    player.vx = player.dir * ch.speed * 2.4;
+    spawnParticles(player.x + player.w / 2, player.y + player.h / 2, '#aaddff', 6);
+  }
+
   // ── Player physics ──
   if (!player.crouching) {
     if (keys['ArrowLeft'] || keys['KeyA']) { player.vx -= 0.8; player.dir = -1; }
@@ -446,14 +464,26 @@ function update() {
     player.vx *= 0.75; // しゃがみ中は素早く減速
   }
   player.vx *= 0.78;
-  const maxSpd = ch.speed;
+  const maxSpd = player.dashTimer > 0 ? ch.speed * 2.2 : ch.speed;
   if (Math.abs(player.vx) > maxSpd) player.vx = Math.sign(player.vx) * maxSpd;
 
-  // ジャンプ（長押しで高く、しゃがみ中は不可）
-  if (jumpPressed() && player.onGround && !player.crouching) {
-    player.vy = -ch.jumpPower;
-    player.onGround = false;
-    playSE(seJump);
+  // ── ジャンプ（エッジ検出 + 2段ジャンプ）──
+  const jumpDown = jumpPressed() && !player.prevJump;
+  player.prevJump = jumpPressed();
+  if (jumpDown && !player.crouching) {
+    if (player.onGround) {
+      // 1段目（地上）
+      player.vy = -ch.jumpPower;
+      player.onGround = false;
+      player.jumpsLeft = 1;
+      playSE(seJump);
+    } else if (player.jumpsLeft > 0) {
+      // 2段目（空中）
+      player.vy = -ch.jumpPower * 0.9;
+      player.jumpsLeft--;
+      spawnParticles(player.x + player.w / 2, player.y + player.h / 2, '#ffffff', 5);
+      playSE(seJump);
+    }
   }
   // 早めにボタンを離すと低いジャンプに
   if (!jumpPressed() && player.vy < -5) player.vy = -5;
